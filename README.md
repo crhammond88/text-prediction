@@ -19,7 +19,7 @@ Enter a text sequence into the empty box on the top-left side of the app and exp
 
 #### Control Panel
 
-[Control Panel](presentation/controlPanel.JPG)
+![Control Panel](presentation/controlPanel.JPG)
 
 The Control Panel allows you to change four variables:
 
