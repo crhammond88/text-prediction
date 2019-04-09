@@ -1,0 +1,127 @@
+---
+title: "Text Prediction - Milestone Report"
+author: "Chris Hammond"
+date: "March 4, 2019"
+output: html_document
+---
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+library(stringi)
+library(tm)
+library(tokenizers)
+library(plyr)
+library(wordcloud)
+library(ggplot2)
+
+
+#Load Data
+blogs <- readLines("final/en_US/en_US.blogs.txt", encoding = "UTF-8", skipNul = TRUE)
+twitter <- readLines("final/en_US/en_US.twitter.txt", encoding = "UTF-8", skipNul = TRUE)
+
+bin.news <- file("final/en_US/en_US.news.txt", open="rb") #read as binary to avoid data loss
+news <- readLines(bin.news, encoding="UTF-8")
+close(bin.news)
+rm(bin.news)
+
+
+# Summarize Data
+blogs.wordCount <- stri_count_words(blogs)
+news.wordCount <- stri_count_words(news)
+twitter.wordCount <- stri_count_words(twitter)
+
+
+# Sample Data
+set.seed(1337)
+sampleTwitter <- twitter[sample(1:length(twitter),10000)]
+sampleBlogs <- blogs[sample(1:length(blogs),10000)]
+sampleNews <- news[sample(1:length(news),10000)]
+sampleData <- c(sampleTwitter,sampleBlogs,sampleNews)
+
+
+# Clean Data
+cleanData <- Corpus(VectorSource(sampleData))
+
+toSpace <- content_transformer(function(x, pattern) gsub(pattern, " ", x))
+cleanData <- tm_map(cleanData, toSpace, "[^[:graph:]]") #remove non-visible characters
+cleanData <- tm_map(cleanData, toSpace, "\"|/|\\|@") #remove symbols (",/,\,@)
+cleanData <- tm_map(cleanData, removeNumbers)
+cleanData <- tm_map(cleanData, removePunctuation)
+cleanData <- tm_map(cleanData, stripWhitespace)
+cleanData <- tm_map(cleanData, tolower)
+#cleanData <- tm_map(cleanData, stemDocument) #reduce words to stem form
+cleanData <- tm_map(cleanData, removeWords, stopwords("en"))
+
+
+# Tokenize Data
+splitGrams <- function(size) {
+  gramData <- tm_map(cleanData, tokenize_ngrams, n=size, n_min=size) #split into n-grams 
+  gramData <- data.frame(text=unlist(sapply(gramData, identity)), stringsAsFactors=FALSE) #convert to dataframe
+  gramData <- data.frame(table(gramData)) #convert to table for sorting
+  gramData <- gramData[order(gramData$Freq, decreasing=TRUE),] #sort with most frequent n-grams first
+  return(gramData)
+}
+
+twoGrams <- splitGrams(2)
+threeGrams <- splitGrams(3)
+fourGrams <- splitGrams(4)
+fiveGrams <- splitGrams(5)
+
+
+# Visualize Data
+plotGrams <- function(data, maxNum, color, xlabel) {
+  ggplot(data[1:maxNum,], aes(reorder(gramData, Freq), Freq)) + 
+    geom_bar(stat="identity", fill=color) +
+    labs(x=xlabel, y="Frequency") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 70, size = 10, hjust = 1))
+}
+```
+
+### Overview
+This report contains exploratory analysis of the data provided to create a text prediction algorithm. Composite datasets from three sources were provided: news articles, twitter, and blog posts. An algorithm will be trained using the data to create a Shiny app.
+
+
+### Data Summary
+A basic summary of the three datasets can be seen in the table below. 
+
+```{r echo=FALSE}
+data.frame(t(sapply(list(blogs,news,twitter),stri_stats_general)),
+           WordCount = c(sum(blogs.wordCount), sum(news.wordCount), sum(twitter.wordCount)),
+           WordAverage = c(mean(blogs.wordCount), mean(news.wordCount), mean(twitter.wordCount)),
+           row.names = c("blogs", "news", "twitter"))
+```
+
+
+### Data Visualization
+A random sample was taken from each of the three datasets to illustrate major features of the data relevant to text prediciton. The sample data was then cleaned for better processing. The most common words in the combined data sample are shown in the graphic below. Larger words are more common.
+
+```{r echo=FALSE}
+wordcloud(cleanData, scale=c(3,.5), max.words=100, random.order=FALSE,
+          rot.per=0, colors=brewer.pal(8, "Dark2"))
+```
+
+Next, N-gram tokenization is used to see what groups of words appear most frequently. The top fifty 2-grams and 3-grams are depicted in the graphs below.
+
+```{r echo=FALSE}
+plotGrams(twoGrams, 50, "blue", "2-Grams")
+```
+
+```{r echo=FALSE}
+plotGrams(threeGrams, 50, "red", "3-Grams")
+```
+
+The above models produce many commonly used phrases. The word groupings appear less useful once the 3-gram threshold is crossed. The graph below shows the top twenty-five 4-grams.
+
+```{r echo=FALSE}
+plotGrams(fourGrams, 25, "green", "4-Grams")
+```
+
+Higher numbers for tokenization were also investigated, but results on the sample were not promising. The graph below shows the top eight 5-grams.
+
+```{r echo=FALSE}
+plotGrams(fiveGrams, 8, "purple", "5-Grams")
+```
+
+### Plans
+The next step is to build an app that predicts the users next word based on the previous 1-3 words entered. I will focus on 2-gram and 3-gram models for prediction and utilize punctuation to improve data tokenization for more accurate results. The algorithm will be trained on a much larger sample of the data than the one used for this report.
+
